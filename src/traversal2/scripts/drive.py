@@ -25,8 +25,8 @@ class Drive:
         
         self.steering_ctrl = [0,0,0] #gives modes for steering
         self.drive_ctrl = [0,0] #drive fb and lr axes
-        self.fb_axis = 1
-        self.lr_axis = 0
+        self.fb_axis = 1 #forward-back
+        self.lr_axis = 0 #left-right
         self.mode = 0 # from 0 to 4
         self.steering_complete = True
         self.s_arr = [25,35,50,75,110] #same as galileo drive multipliers
@@ -37,7 +37,7 @@ class Drive:
         self.omega_prev = queue.Queue(self.qsize) #to implement ledc type control
         self.start_time = time.time()
         self.time_thresh = 10
-        self.error_thresh = 5000
+        self.error_thresh = 2
 
         self.rotinplace = False
     def enc_callback(self,msg):
@@ -72,7 +72,7 @@ class Drive:
             self.rotinplace = False
             #loop here with encoder feedback
             self.start_time = time.time()
-            self.steer(self.enc_data,90)  
+            self.steer(self.enc_data,90,0)  #initial_angle = enc_data, final_angle, mode = 0 for relative
 
 
         elif(self.steering_ctrl[1] == 1):
@@ -81,7 +81,7 @@ class Drive:
             self.rotinplace = False
             #loop here with encoder feedback
             self.start_time = time.time()
-            self.steer(0,0)  
+            self.steer(0,0,1) #initial angle, final angle, mode=1 for absolute 
             
                     
 
@@ -128,22 +128,40 @@ class Drive:
             self.omega_prev.put(omega, True, 2)
 
 
-    def steer(self,initial_angle, final_angle):
+    def steer(self,initial_angle, final_angle, mode):
         print("steering called", self.enc_data, initial_angle)
-        while(abs(self.enc_data - initial_angle) < self.error_thresh+final_angle and time.time() - self.start_time <= self.time_thresh):
-            if(int(time.time() - self.start_time * 10) % 2 == 0):
-                print("Executing steering", self.enc_data)
-            self.pwm_msg.data = [0,0,0,0,-self.kp_steer*(final_angle-self.enc_data+initial_angle),-self.kp_steer*(final_angle-(self.enc_data-initial_angle)),-self.kp_steer*(final_angle - (self.enc_data-initial_angle)),-self.kp_steer*(final_angle - (self.enc_data-initial_angle))]
+        if(mode == 0):
+            while(abs(self.enc_data - initial_angle) < final_angle-self.error_thresh and time.time() - self.start_time <= self.time_thresh):
+                if(int(time.time() - self.start_time * 10) % 2 == 0):
+                    print("Executing steering", self.enc_data)
+                self.pwm_msg.data = [0,0,0,0,-self.kp_steer*(final_angle-self.enc_data+initial_angle),-self.kp_steer*(final_angle-(self.enc_data-initial_angle)),-self.kp_steer*(final_angle - (self.enc_data-initial_angle)),-self.kp_steer*(final_angle - (self.enc_data-initial_angle))]
 
-            self.pwm_msg.layout = MultiArrayLayout()
-            self.pwm_msg.layout.data_offset = 0
+                self.pwm_msg.layout = MultiArrayLayout()
+                self.pwm_msg.layout.data_offset = 0
 
-            self.pwm_msg.layout.dim = [ MultiArrayDimension() ]
-            self.pwm_msg.layout.dim[0].size = self.pwm_msg.layout.dim[0].stride = len(self.pwm_msg.data)
-            self.pwm_msg.layout.dim[0].label = 'write'
-            rate = rospy.Rate(10)
-            rate.sleep()
-            self.pwm_pub.publish(self.pwm_msg)
+                self.pwm_msg.layout.dim = [ MultiArrayDimension() ]
+                self.pwm_msg.layout.dim[0].size = self.pwm_msg.layout.dim[0].stride = len(self.pwm_msg.data)
+                self.pwm_msg.layout.dim[0].label = 'write'
+                rate = rospy.Rate(10)
+                rate.sleep()
+                self.pwm_pub.publish(self.pwm_msg)
+        elif(mode == 1):
+            enc_data_init = self.enc_data
+            while(abs(self.enc_data - initial_angle-final_angle) > self.error_thresh and time.time() - self.start_time <= self.time_thresh):
+                if(int(time.time() - self.start_time * 10) % 2 == 0):
+                    print("Executing steering", self.enc_data)
+                self.pwm_msg.data = [0,0,0,0,-self.kp_steer*(final_angle-self.enc_data+initial_angle),-self.kp_steer*(final_angle-(self.enc_data-initial_angle)),-self.kp_steer*(final_angle - (self.enc_data-initial_angle)),-self.kp_steer*(final_angle - (self.enc_data-initial_angle))]
+
+                self.pwm_msg.layout = MultiArrayLayout()
+                self.pwm_msg.layout.data_offset = 0
+
+                self.pwm_msg.layout.dim = [ MultiArrayDimension() ]
+                self.pwm_msg.layout.dim[0].size = self.pwm_msg.layout.dim[0].stride = len(self.pwm_msg.data)
+                self.pwm_msg.layout.dim[0].label = 'write'
+                rate = rospy.Rate(10)
+                rate.sleep()
+                self.pwm_pub.publish(self.pwm_msg)
+        
         
         else:
             print("In Rotation")
