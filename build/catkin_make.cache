@@ -1,0 +1,2 @@
+traversal2
+-DCATKIN_DEVEL_PREFIX=/home/nvidia/galileo2024/devel -DCMAKE_INSTALL_PREFIX=/home/nvidia/galileo2024/install -G Unix Makefiles
